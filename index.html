@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pelada: sorteio, placar e fila</title>
+<meta name="theme-color" content="#1f6f43">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@700&display=swap">
+<style>
+/* ===== 1. Tokens de cor (claro, escuro automático) ===== */
+:root{
+  --bg:#ece8dc; --card:#faf8f1; --ink:#1c2420; --muted:#5d665f; --line:#cfc9b8;
+  --verde:#1f6f43; --on-verde:#ffffff; --laranja:#e4571b;
+  --placar:#1c2420; --placar-ink:#f2efe4;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#121815; --card:#1b231e; --ink:#ecebe3; --muted:#9aa59d; --line:#2e3a33;
+    --verde:#4fb37c; --on-verde:#0b0f0d; --laranja:#ff7a3d;
+    --placar:#0b0f0d; --placar-ink:#f2efe4; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121815; --card:#1b231e; --ink:#ecebe3; --muted:#9aa59d; --line:#2e3a33;
+  --verde:#4fb37c; --on-verde:#0b0f0d; --laranja:#ff7a3d;
+  --placar:#0b0f0d; --placar-ink:#f2efe4; color-scheme:dark;
+}
+
+/* ===== 2. Base ===== */
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Barlow",system-ui,sans-serif}
+.wrap{max-width:560px;margin:0 auto;padding:16px}
+h1,h2{font-family:"Barlow Condensed","Arial Narrow",sans-serif;margin:0}
+h1{font-size:2.4rem;line-height:1;margin:8px 0 16px}
+h2{font-size:1.4rem;margin-bottom:10px}
+.hidden{display:none!important}
+
+/* ===== 3. Cartões, formulário, botões ===== */
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:.875rem;color:var(--muted);margin-bottom:4px}
+textarea,input{width:100%;font:inherit;color:inherit;background:transparent;border:1px solid var(--line);border-radius:8px;padding:10px}
+textarea{min-height:130px;resize:vertical}
+.cfg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+.erro{color:var(--laranja);margin:0 0 10px;min-height:1.4em}
+button{font:600 1rem "Barlow",system-ui,sans-serif;border:0;border-radius:8px;padding:12px 14px;min-height:44px;
+  background:var(--verde);color:var(--on-verde);cursor:pointer}
+button.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.full{width:100%}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--laranja);outline-offset:2px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+
+/* ===== 4. Placar ===== */
+.placar{background:var(--placar);color:var(--placar-ink);border-radius:10px;padding:16px;margin-bottom:14px;text-align:center}
+.tempo{font:700 4.5rem/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;color:var(--laranja)}
+.regra{margin:4px 0 0;font-size:.875rem;opacity:.75}
+.lados{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.nome{font-weight:600}
+.num{font:700 4.5rem/1 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.btns{display:flex;gap:8px;justify-content:center}
+.gol{background:var(--laranja);color:#1c2420}
+.placar .sec{color:var(--placar-ink);border-color:rgba(242,239,228,.3)}
+.resultado{border-top:1px solid rgba(242,239,228,.25);padding-top:14px;margin-bottom:12px}
+.resultado p{margin:0 0 10px}
+
+/* ===== 5. Fila e histórico ===== */
+ol{list-style:none;margin:0;padding:0}
+.fila li{border-left:4px solid var(--line);padding:6px 0 6px 12px;margin-bottom:8px}
+.fila li.quadra{border-color:var(--verde)}
+.fila li.desafiante{border-color:var(--laranja)}
+.fila .topo{display:flex;justify-content:space-between;gap:8px}
+.fila small,.vazio{color:var(--muted)}
+.hist li{padding:4px 0;border-bottom:1px solid var(--line)}
+#reservas{margin:12px 0}
+.aviso{margin:0 0 12px;padding:8px 12px;border-left:4px solid var(--laranja)}
+.abas{display:flex;gap:8px;margin-bottom:14px}
+.abas button{flex:1;background:transparent;color:var(--ink);border:1px solid var(--line)}
+.abas button[aria-selected="true"]{background:var(--verde);color:var(--on-verde);border-color:var(--verde)}
+.autor{border-top:1px solid rgba(242,239,228,.25);padding-top:14px;margin-bottom:12px}
+.autor p{margin:0 0 10px;font-weight:600}
+.autor-lista{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.autor-lista .nomej{background:var(--laranja);color:#1c2420}
+.artilheiro{font:700 2.4rem/1.1 "Barlow Condensed","Arial Narrow",sans-serif;margin:0 0 4px}
+.rank li{display:flex;justify-content:space-between;gap:8px}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Pelada</h1>
+  <nav id="abas" class="abas hidden" role="tablist">
+    <button role="tab" aria-selected="true" data-aba="jogo">Jogo</button>
+    <button role="tab" aria-selected="false" data-aba="gols">Gols do dia</button>
+  </nav>
+
+  <!-- TELA 1: cadastro e sorteio -->
+  <section id="setup" class="card">
+    <h2>Quem vem hoje?</h2>
+    <label for="nomes">Um nome por linha</label>
+    <textarea id="nomes" placeholder="Bruno&#10;Carla&#10;Diego"></textarea>
+    <div class="cfg">
+      <div><label for="tam">Por time</label><input id="tam" type="number" inputmode="numeric" min="2" max="11" value="4"></div>
+      <div><label for="min">Minutos</label><input id="min" type="number" inputmode="numeric" min="1" max="60" value="10"></div>
+      <div><label for="gols">Gols p/ vencer</label><input id="gols" type="number" inputmode="numeric" min="1" max="20" value="2"></div>
+    </div>
+    <p id="erro" class="erro" role="alert"></p>
+    <button id="sortear" class="full">Sortear times</button>
+  </section>
+
+  <div id="aba-jogo">
+  <!-- TELA 2: partida em andamento -->
+  <section id="jogo" class="placar hidden">
+    <div id="tempo" class="tempo" role="timer">10:00</div>
+    <p id="regra" class="regra"></p>
+    <div class="lados">
+      <div>
+        <div id="nome0" class="nome"></div>
+        <div id="num0" class="num">0</div>
+        <div class="btns">
+          <button class="gol" data-lado="0" data-d="1">+ Gol</button>
+          <button class="sec" data-lado="0" data-d="-1" aria-label="Remover um gol">−1</button>
+        </div>
+      </div>
+      <div>
+        <div id="nome1" class="nome"></div>
+        <div id="num1" class="num">0</div>
+        <div class="btns">
+          <button class="gol" data-lado="1" data-d="1">+ Gol</button>
+          <button class="sec" data-lado="1" data-d="-1" aria-label="Remover um gol">−1</button>
+        </div>
+      </div>
+    </div>
+    <div id="autor" class="autor hidden">
+      <p id="autor-titulo"></p>
+      <div id="autor-lista" class="autor-lista"></div>
+      <button id="autor-cancelar" class="sec full">Cancelar gol</button>
+    </div>
+    <div id="resultado" class="resultado hidden">
+      <p id="res-texto"></p>
+      <button id="proxima" class="full">Próxima partida</button>
+    </div>
+    <div id="controles" class="row">
+      <button id="btn-timer">Iniciar tempo</button>
+      <button id="reiniciar" class="sec">Reiniciar</button>
+    </div>
+  </section>
+
+  <!-- Fila de times -->
+  <section id="fila-card" class="card hidden">
+    <h2>Times e fila</h2>
+    <p id="aviso" class="aviso hidden"></p>
+    <ol id="fila" class="fila"></ol>
+    <p id="reservas" class="vazio"></p>
+    <label for="novo-nome">Chegou mais um jogador?</label>
+    <div class="row">
+      <input id="novo-nome" type="text" autocomplete="off" placeholder="Nome">
+      <button id="add-jogador" style="flex:0 0 auto">Adicionar</button>
+    </div>
+    <p id="erro-add" class="erro" role="alert"></p>
+    <button id="novo" class="sec full">Novo sorteio</button>
+  </section>
+
+  <!-- Resultados -->
+  <section id="hist-card" class="card hidden">
+    <h2>Resultados</h2>
+    <ol id="hist" class="hist"></ol>
+  </section>
+  </div>
+
+  <!-- Aba: gols do dia -->
+  <section id="aba-gols" class="hidden">
+    <div class="card">
+      <h2>Artilheiro do dia</h2>
+      <p id="artilheiro" class="artilheiro"></p>
+      <p id="artilheiro-info" class="vazio"></p>
+    </div>
+    <div class="card">
+      <h2>Gols por jogador</h2>
+      <p id="total-gols" class="vazio"></p>
+      <ol id="ranking" class="hist rank"></ol>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ===== A. Estado e armazenamento ===== */
+const KEY = 'pelada:v2';
+const $ = id => document.getElementById(id);
+let S = carregar();      // null = ainda não sorteou
+let tick = null;         // id do setInterval
+
+function carregar() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s) { s.golsLog = s.golsLog || []; s.partidaId = s.partidaId || 1; }   // estados antigos
+    return s;
+  }
+  catch { return null; }   // armazenamento pode estar vazio ou bloqueado
+}
+function salvar() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {}
+}
+
+/* ===== B. Utilidades ===== */
+const limitar = (v, min, max, padrao) =>
+  Math.min(max, Math.max(min, Number.isFinite(v) ? Math.round(v) : padrao));
+
+function embaralhar(lista) {          // Fisher-Yates em uma cópia
+  const a = [...lista];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const time = id => S.times.find(t => t.id === id);
+
+/* ===== C. Sorteio ===== */
+function sortear() {
+  const tam  = limitar(+$('tam').value, 2, 11, 4);
+  const min  = limitar(+$('min').value, 1, 60, 10);
+  const gols = limitar(+$('gols').value, 1, 20, 2);
+
+  // remove linhas vazias e nomes repetidos (sem diferenciar maiúsculas)
+  const vistos = new Set(), nomes = [];
+  for (const n of $('nomes').value.split('\n').map(s => s.trim()).filter(Boolean)) {
+    const k = n.toLowerCase();
+    if (!vistos.has(k)) { vistos.add(k); nomes.push(n); }
+  }
+  if (nomes.length < tam * 2) {
+    $('erro').textContent = `Com ${tam} por time, são necessários pelo menos ${tam * 2} jogadores. Você informou ${nomes.length}.`;
+    return;
+  }
+  $('erro').textContent = '';
+
+  const sobra = embaralhar(nomes), times = [];
+  while (sobra.length >= tam) {
+    const id = times.length + 1;
+    times.push({ id, nome: `Time ${id}`, jogadores: sobra.splice(0, tam), vitorias: 0 });
+  }
+  S = { cfg: { tam, min, gols }, times, fila: times.map(t => t.id), reservas: sobra,
+        placar: [0, 0], restante: min * 60, fim: null, status: 'parado',
+        resultado: null, historico: [], aviso: '', golsLog: [], partidaId: 1,
+        descansos: Object.fromEntries(sobra.map(n => [n, 1])) };   // quantas vezes cada um já ficou de fora
+  salvar(); render();
+}
+
+/* ===== D. Cronômetro (baseado no relógio, sem atraso acumulado) ===== */
+function pararTick() { clearInterval(tick); tick = null; }
+function iniciarTick() { pararTick(); tick = setInterval(atualizarTempo, 250); atualizarTempo(); }
+
+function atualizarTempo() {
+  if (S.status !== 'rodando') return;
+  S.restante = Math.max(0, Math.ceil((S.fim - Date.now()) / 1000));
+  mostrarTempo();
+  if (S.restante === 0) { finalizar('tempo'); salvar(); render(); }
+}
+function mostrarTempo() {
+  const m = String(Math.floor(S.restante / 60)).padStart(2, '0');
+  const s = String(S.restante % 60).padStart(2, '0');
+  $('tempo').textContent = `${m}:${s}`;
+}
+function alternarTempo() {
+  if (S.status === 'rodando') {
+    atualizarTempo(); pararTick(); S.status = 'pausado'; S.fim = null;
+  } else if (S.status !== 'encerrado') {
+    S.status = 'rodando'; S.fim = Date.now() + S.restante * 1000; iniciarTick();
+  }
+  salvar(); render();
+}
+
+/* ===== E. Regras da partida ===== */
+let pendente = null;   // lado que marcou e ainda falta escolher o autor
+let aba = 'jogo';      // aba aberta: 'jogo' ou 'gols'
+
+function gol(lado, delta, jogador) {
+  if (S.status === 'encerrado') return;
+  if (delta > 0) {
+    S.placar[lado]++;
+    S.golsLog.push({ p: S.partidaId, lado, jogador: jogador || null });
+    if (S.placar[lado] >= S.cfg.gols) finalizar('gols');
+  } else if (S.placar[lado] > 0) {
+    S.placar[lado]--;
+    // desfaz o último gol desse lado na partida atual
+    for (let i = S.golsLog.length - 1; i >= 0; i--) {
+      const g = S.golsLog[i];
+      if (g.p === S.partidaId && g.lado === lado) { S.golsLog.splice(i, 1); break; }
+    }
+  }
+  salvar(); render();
+}
+
+// Jogador que chega depois do sorteio espera no fim da fila.
+// Se a espera juntar jogadores suficientes, forma um time novo no fim da fila.
+function adicionarJogador() {
+  const nome = $('novo-nome').value.trim();
+  const todos = [...S.times.flatMap(t => t.jogadores), ...S.reservas].map(n => n.toLowerCase());
+  if (!nome) { $('erro-add').textContent = 'Digite o nome do jogador.'; return; }
+  if (todos.includes(nome.toLowerCase())) { $('erro-add').textContent = `${nome} já está na pelada.`; return; }
+  $('erro-add').textContent = ''; $('novo-nome').value = '';
+  S.reservas.push(nome);
+  S.descansos[nome] = 1;
+  S.aviso = `${nome} entrou na espera e joga depois dos times que já estão na fila.`;
+  while (S.reservas.length >= S.cfg.tam) {
+    const id = S.times.length + 1;
+    S.times.push({ id, nome: `Time ${id}`, jogadores: S.reservas.splice(0, S.cfg.tam), vitorias: 0 });
+    S.fila.push(id);
+    S.aviso = `Time ${id} formado com quem estava na espera e colocado no fim da fila.`;
+  }
+  salvar(); render();
+}
+
+// Escolha do autor: um botão por jogador do time que marcou
+function desenharAutor() {
+  const t = time(S.fila[pendente]);
+  $('autor-titulo').textContent = `Quem fez o gol do ${t.nome}?`;
+  const lista = $('autor-lista'); lista.replaceChildren();
+  const escolher = n => () => { const l = pendente; pendente = null; gol(l, 1, n); };
+  t.jogadores.forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'nomej'; b.textContent = n; b.addEventListener('click', escolher(n));
+    lista.append(b);
+  });
+  const s = document.createElement('button');
+  s.className = 'sec'; s.textContent = 'Sem autor'; s.addEventListener('click', escolher(null));
+  lista.append(s);
+}
+
+// Aba de gols: total, artilheiro (ou artilheiros, se empatar) e ranking
+function renderGols() {
+  const por = {}; let semAutor = 0;
+  S.golsLog.forEach(g => { if (g.jogador) por[g.jogador] = (por[g.jogador] || 0) + 1; else semAutor++; });
+  const rank = Object.entries(por).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'));
+  const max = rank.length ? rank[0][1] : 0;
+  const lideres = rank.filter(r => r[1] === max).map(r => r[0]);
+  $('artilheiro').textContent = max ? lideres.join(', ') : 'Ainda sem gols';
+  $('artilheiro-info').textContent = max
+    ? `${max} ${max === 1 ? 'gol' : 'gols'}${lideres.length > 1 ? ' cada' : ''}`
+    : 'Na aba Jogo, toque em + Gol e escolha quem marcou.';
+  const total = S.golsLog.length;
+  $('total-gols').textContent = `${total} ${total === 1 ? 'gol' : 'gols'} no dia` + (semAutor ? `, ${semAutor} sem autor` : '');
+  const ol = $('ranking'); ol.replaceChildren();
+  rank.forEach(([n, q]) => {
+    const li = document.createElement('li');
+    const a = document.createElement('span'); a.textContent = n;
+    const b = document.createElement('strong'); b.textContent = q;
+    li.append(a, b); ol.append(li);
+  });
+}
+
+function finalizar(motivo) {
+  pararTick();
+  const [a, b] = S.fila.slice(0, 2).map(time);
+  const [pa, pb] = S.placar;
+  const venc = pa > pb ? 0 : pb > pa ? 1 : null;   // null = empate
+  if (venc !== null) [a, b][venc].vitorias++;
+  S.historico.push({ a: a.nome, b: b.nome, pa, pb, motivo });
+  S.status = 'encerrado'; S.fim = null; S.resultado = { venc, motivo };
+  try { navigator.vibrate && navigator.vibrate(300); } catch {}
+}
+
+// O time que sai é refeito com quem estava de fora:
+// os reservas entram e, no lugar deles, descansam jogadores do time que saiu
+// (descansa quem ficou de fora menos vezes; empate é sorteado).
+function rotacionar(idSai) {
+  const t = time(idSai);
+  S.aviso = '';
+  if (S.reservas.length) {
+    const entram = S.reservas;
+    const ordem = embaralhar(t.jogadores)
+      .sort((x, y) => (S.descansos[x] || 0) - (S.descansos[y] || 0));
+    const descansam = ordem.slice(0, entram.length);
+    const ficam = ordem.slice(entram.length);
+    descansam.forEach(n => S.descansos[n] = (S.descansos[n] || 0) + 1);
+    t.jogadores = [...entram, ...ficam];   // continua com o tamanho certo
+    S.reservas = descansam;
+    S.aviso = `${t.nome} foi refeito: ${entram.join(', ')} ${entram.length > 1 ? 'entram' : 'entra'} e ${descansam.join(', ')} ${descansam.length > 1 ? 'descansam' : 'descansa'}.`;
+  }
+  S.fila.push(idSai);   // vai para o fim da fila
+}
+
+// Quem ganha fica. Empate: sai o time que estava há mais tempo em quadra.
+function proxima() {
+  const { venc } = S.resultado;
+  rotacionar(venc === 0 ? S.fila.splice(1, 1)[0] : S.fila.shift());
+  S.placar = [0, 0]; S.restante = S.cfg.min * 60; S.partidaId++;   // nova partida
+  S.status = 'parado'; S.resultado = null;
+  salvar(); render();
+}
+
+function reiniciarPartida() {
+  pararTick();
+  S.golsLog = S.golsLog.filter(g => g.p !== S.partidaId);   // apaga os gols da partida reiniciada
+  pendente = null;
+  S.placar = [0, 0]; S.restante = S.cfg.min * 60; S.fim = null;
+  S.status = 'parado'; S.resultado = null;
+  salvar(); render();
+}
+
+/* ===== F. Desenho da tela ===== */
+function render() {
+  const tem = !!S;
+  $('setup').classList.toggle('hidden', tem);
+  $('jogo').classList.toggle('hidden', !tem);
+  $('fila-card').classList.toggle('hidden', !tem);
+  $('hist-card').classList.toggle('hidden', !tem || !S.historico.length);
+  $('abas').classList.toggle('hidden', !tem);
+  $('aba-jogo').classList.toggle('hidden', tem && aba !== 'jogo');
+  $('aba-gols').classList.toggle('hidden', !tem || aba !== 'gols');
+  document.querySelectorAll('[data-aba]').forEach(b => b.setAttribute('aria-selected', b.dataset.aba === aba));
+  if (!tem) return;
+
+  const [a, b] = S.fila.slice(0, 2).map(time);
+  const fim = S.status === 'encerrado';
+  $('nome0').textContent = a.nome; $('nome1').textContent = b.nome;
+  $('num0').textContent = S.placar[0]; $('num1').textContent = S.placar[1];
+  $('regra').textContent = `${S.cfg.min} min ou ${S.cfg.gols} ${S.cfg.gols === 1 ? 'gol' : 'gols'}`;
+  mostrarTempo();
+
+  if (fim) pendente = null;
+  const escolhendo = pendente !== null;
+  $('autor').classList.toggle('hidden', !escolhendo);
+  document.querySelectorAll('[data-lado]').forEach(btn => btn.disabled = fim || escolhendo);
+  if (escolhendo) desenharAutor();
+  $('controles').classList.toggle('hidden', fim);
+  $('btn-timer').textContent =
+    S.status === 'rodando' ? 'Pausar' : S.status === 'pausado' ? 'Continuar' : 'Iniciar tempo';
+
+  $('resultado').classList.toggle('hidden', !fim);
+  if (fim) {
+    const { venc, motivo } = S.resultado;
+    $('res-texto').textContent = venc === null
+      ? `Empate. Sai ${a.nome}, que estava há mais tempo em quadra.`
+      : `${[a, b][venc].nome} venceu ${motivo === 'gols' ? `ao chegar a ${S.cfg.gols} gols` : 'no tempo'} e fica em quadra.`;
+  }
+
+  // fila de times (textContent evita que um nome com HTML quebre a página)
+  const ol = $('fila'); ol.replaceChildren();
+  S.fila.forEach((id, i) => {
+    const t = time(id), li = document.createElement('li');
+    li.className = i === 0 ? 'quadra' : i === 1 ? 'desafiante' : '';
+    const topo = document.createElement('div'); topo.className = 'topo';
+    const n = document.createElement('strong'); n.textContent = t.nome;
+    const e = document.createElement('span');
+    e.textContent = `${i === 0 ? 'Em quadra' : i === 1 ? 'Desafiante' : 'Fila ' + (i - 1)} · ${t.vitorias} ${t.vitorias === 1 ? 'vitória' : 'vitórias'}`;
+    topo.append(n, e);
+    const j = document.createElement('small'); j.textContent = t.jogadores.join(', ');
+    li.append(topo, j); ol.append(li);
+  });
+  $('aviso').textContent = S.aviso;
+  $('aviso').classList.toggle('hidden', !S.aviso);
+  $('reservas').textContent = S.reservas.length ? `De fora agora: ${S.reservas.join(', ')}` : '';
+  $('reservas').classList.toggle('hidden', !S.reservas.length);
+
+  const h = $('hist'); h.replaceChildren();
+  S.historico.slice(-8).reverse().forEach(r => {
+    const li = document.createElement('li');
+    li.textContent = `${r.a} ${r.pa} x ${r.pb} ${r.b}${r.motivo === 'tempo' ? ' (tempo)' : ''}`;
+    h.append(li);
+  });
+  renderGols();
+}
+
+/* ===== G. Confirmação em dois toques (sem alert/confirm) ===== */
+function confirmar(botao, acao) {
+  if (botao.dataset.pronto) { delete botao.dataset.pronto; botao.textContent = botao.dataset.rotulo; acao(); return; }
+  botao.dataset.rotulo = botao.textContent;
+  botao.dataset.pronto = '1';
+  botao.textContent = 'Toque de novo para confirmar';
+  setTimeout(() => {
+    if (botao.dataset.pronto) { delete botao.dataset.pronto; botao.textContent = botao.dataset.rotulo; }
+  }, 3000);
+}
+
+/* ===== H. Eventos e início ===== */
+$('sortear').addEventListener('click', sortear);
+$('btn-timer').addEventListener('click', alternarTempo);
+$('proxima').addEventListener('click', proxima);
+$('reiniciar').addEventListener('click', e => confirmar(e.currentTarget, reiniciarPartida));
+$('novo').addEventListener('click', e => confirmar(e.currentTarget, () => {
+  pararTick(); S = null; pendente = null; aba = 'jogo'; salvar(); render();
+}));
+document.querySelectorAll('[data-lado]').forEach(btn =>
+  btn.addEventListener('click', () => {
+    const lado = +btn.dataset.lado;
+    if (+btn.dataset.d > 0) { pendente = lado; render(); }   // primeiro escolhe o autor
+    else gol(lado, -1);
+  }));
+$('autor-cancelar').addEventListener('click', () => { pendente = null; render(); });
+$('add-jogador').addEventListener('click', adicionarJogador);
+$('novo-nome').addEventListener('keydown', e => { if (e.key === 'Enter') adicionarJogador(); });
+document.querySelectorAll('[data-aba]').forEach(b =>
+  b.addEventListener('click', () => { aba = b.dataset.aba; render(); }));
+
+render();
+if (S && S.status === 'rodando') iniciarTick();   // retoma se a página foi recarregada
+
+/* ===== I. Modo offline (PWA) ===== */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
